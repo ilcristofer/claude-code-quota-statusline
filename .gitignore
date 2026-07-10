@@ -1,0 +1,15 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+
+# Runtime temp files this status line writes (they live in the OS temp dir, but ignore
+# stray copies just in case)
+cc-sl-*.json
+
+# Internal project notes — kept locally, NOT published
+CLAUDE.md

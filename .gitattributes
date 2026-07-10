@@ -1,0 +1,4 @@
+# Normalize line endings to LF in the repo (checkout is native per-OS).
+* text=auto eol=lf
+*.mjs text eol=lf
+*.md  text eol=lf
