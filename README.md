@@ -9,7 +9,7 @@ built for **subscription** users (Pro / Max), not API users.
 > context-rot risk). This status line drops the `$` entirely and shows you *that* instead.
 
 ```
-Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% → Pro~100%⚠  ↻ 3h18m · wk 16% ↻ 3d13h
+Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
 It renders on **one line** when the terminal is wide enough, and automatically **splits
@@ -17,7 +17,7 @@ into two** when it isn't:
 
 ```
 Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k
-5h 20% → Pro~100%⚠  ↻ 3h18m · wk 16% ↻ 3d13h
+5h 20% → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
 When the context grows, the bar changes color by zone and adds an actionable hint plus
@@ -66,8 +66,15 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 - **Per-session quota delta** `(+X%)` — how many quota points *this session* burned.
 - **`Pro~` projection** — estimates the same usage against the Pro plan, so you can judge
   whether Pro would be enough (or whether you're safe on Max).
-- **Reset countdowns** `↻` for both windows.
+- **Reset countdowns + wall-clock time** `↻ 3h18m (18:42)` — both *how long* until each window
+  resets and *at what time* (weekday-prefixed when it's more than ~20h out, e.g. `Wed 09:00`).
+- **Binding-constraint marker** `◀` — flags whichever window (5h vs weekly) is closer to its own
+  cap, i.e. the one that will bite first (only when it's ≥50% and there's a real gap).
+- **Burn-rate warning** `⚠ full ~45m` — if, at *this session's* average pace, a window would hit
+  100% **before** it resets, it warns you with the projected time-to-full. Hidden otherwise.
 - **Cache hit %** and **cold-turn** warning.
+- **Optional orientation** — a non-default output style shows automatically; git branch + dirty
+  flag and the project-dir name are opt-in (see Configuration).
 - **Adaptive layout** — 1 line if it fits `COLUMNS`, else 2.
 - **Stale-data fallback** — shows the last known quota (marked `*`) at launch, before the
   first API round-trip populates `rate_limits`.
@@ -82,8 +89,11 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 | Compaction hint | `~ compact (save token) ↓ 50k` | Advisory at thresholds; `↓ N` = tokens reclaimable by `/compact` |
 | Cache | `cache 89%` | Share of input served from cache last turn (high = good) |
 | Turn | `turn 7.2k` | **Fresh** tokens this turn (new input + cache write + output; **excludes** the re-read context) |
-| 5h limit | `5h 20% (+6%) → Pro~100%⚠ ↻ 3h18m` | 5-hour window %, session delta, Pro-plan projection, reset countdown |
-| Weekly limit | `wk 16% ↻ 3d13h` | Weekly window %, session delta, reset countdown |
+| 5h limit | `5h 20% (+6%) → Pro~100%⚠ ↻ 3h18m (18:42) ◀` | 5-hour window %, session delta, Pro-plan projection, reset countdown + wall-clock time; `◀` = binding constraint |
+| Weekly limit | `wk 16% ↻ 3d13h (Wed 09:00)` | Weekly window %, session delta, reset countdown + wall-clock time |
+| Burn warning | `⚠ full ~45m` | Shown only if the window will hit 100% before it resets at the session's average pace |
+| *(opt-in)* dir + git | `statusline ⎇ main*` | Project-dir name (`CC_SL_CWD=1`) and git branch + dirty flag (`CC_SL_GIT=1`) |
+| *(auto)* output style | `· style:concise` | Shown when the output style is non-default |
 
 ## Requirements
 
@@ -163,6 +173,9 @@ All knobs are environment variables — set them in your shell, or in the `env` 
 | `CC_SL_HINT_COMPACT` | `200000` | Token threshold for the yellow "consider /compact" zone |
 | `CC_SL_HINT_CLEAR` | `400000` | Token threshold for the orange "context rot / clear" zone |
 | `CC_SL_PRO_FACTOR` | `5` | Multiplier for the `Pro~` projection (5h Max → Pro). **Recalibrate for your own usage.** |
+| `CC_SL_BURN` | `1` (on) | Set to `0` to hide the `⚠ full ~Yh` burn-rate warning |
+| `CC_SL_GIT` | `0` (off) | Set to `1` to show the git branch + dirty flag (spawns `git` once per render) |
+| `CC_SL_CWD` | `0` (off) | Set to `1` to show the project-dir basename |
 | `COLUMNS` | *(set by Claude Code)* | Terminal width used to decide 1-line vs 2-line layout |
 
 The default thresholds (200k / 400k) are tuned for a **1M** context window. On a 200k model
@@ -195,7 +208,10 @@ this is a safety net, not a recommendation to never compact.
 
 Claude Code invokes the `statusLine` command on every render and passes a JSON payload on
 **stdin** (no transcript needed). The script reads `context_window`, `rate_limits`, `effort`,
-`thinking`, `fast_mode`, and `model` from it, and writes the formatted line to **stdout only**.
+`thinking`, `fast_mode`, `model`, and (for the optional segments) `output_style` and `workspace`
+from it, and writes the formatted line to **stdout only**. The opt-in git segment
+(`CC_SL_GIT=1`) is the one exception to "payload only": it shells out to `git` — guarded by a
+timeout and `try/catch` so it can never hang or crash the line — which is why it's off by default.
 
 `rate_limits` is derived from the last API response headers, so it's absent for the very first
 render of a session; the script persists the last known values to the OS temp dir and shows
