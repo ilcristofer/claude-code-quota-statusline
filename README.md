@@ -94,6 +94,43 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 
 ## Install
 
+### Quick install (script)
+
+One command — it copies `statusline.mjs` into `~/.claude/` and wires it into your
+`settings.json`, **backing up** any existing file and **preserving your other settings** (the
+JSON merge is done with Node, so nothing else is touched). Requires **Node.js** on your `PATH`
+(the status line runs on Node).
+
+**macOS / Linux:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.ps1 | iex
+```
+
+To also install the `/effort-suggest` companion (see below), add the flag:
+
+```sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.sh | sh -s -- --with-effort-suggest
+```
+
+```powershell
+# Windows
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.ps1))) -WithEffortSuggest
+```
+
+Then **restart Claude Code** (or start a new session). Rather not pipe a script from the
+internet? Clone the repo and run `./install.sh` / `./install.ps1` locally — same result — or
+follow the manual steps below.
+
+### Manual install
+
 1. Copy `statusline.mjs` somewhere stable, e.g. `~/.claude/statusline.mjs`.
 2. Point your `~/.claude/settings.json` at it:
 
