@@ -41,6 +41,20 @@ actually run out of is **quota** and **usable context**. So this bar is organize
 - **context** — how full the true model window is, with color-coded zones and compaction hints;
 - **per-turn work** — how fast the context is growing (fresh tokens, *not* the whole re-read context).
 
+## What makes it different
+
+Most Claude Code status lines are built around **dollar cost** and are aimed at API users. This
+one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere in the ecosystem:
+
+- **`Pro~` cross-plan projection** — estimates your current usage against the Pro plan so you can
+  see, at a glance, whether Pro would cover you or you're right to be on Max.
+- **`turn` = fresh tokens only** — input + cache-write + output, *excluding* the re-read context.
+  It's the context-growth rate, not a second copy of the context size.
+- **Proactive compaction hint with `↓ N` reclaimable** — tells you *now* how much you'd reclaim by
+  compacting, before you hit the wall (not a retrospective count of past compactions).
+- **No dollar cost, on purpose** — under a subscription the marginal `$` is zero; the bar spends its
+  pixels on quota and context instead.
+
 ## Features
 
 - **No `$`.** Quota + context + per-turn tokens instead.
@@ -158,14 +172,8 @@ task and recommends an effort level. Drop it in `~/.claude/commands/` to enable 
 
 ## License
 
-Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE): **free for personal
-and other noncommercial use.** Commercial use requires a separate license.
-
-### Commercial use
-
-Using this in or for a for-profit context? Get in touch to arrange a commercial license:
-**ilcristofer@gmail.com**.
+[MIT](LICENSE) © 2026 ilcristofer. Free to use, modify, and distribute — attribution appreciated.
 
 ## Author
 
-Made by **ilcristofer**. Issues and noncommercial contributions welcome.
+Made by **ilcristofer**. Issues, ideas, and PRs welcome.

@@ -1,8 +1,6 @@
 // statusline.mjs — Claude Code status line, "QUOTA-aware" version (subscription plan).
 //
-// Copyright (c) 2026 ilcristofer. Licensed under PolyForm Noncommercial 1.0.0 (see LICENSE).
-// Required Notice: Copyright (c) 2026 ilcristofer
-// Commercial use requires a separate license — contact ilcristofer@gmail.com.
+// Copyright (c) 2026 ilcristofer. MIT License (see LICENSE).
 //
 // Reads the JSON that Claude Code passes on stdin (the transcript is NOT needed).
 // Config: ~/.claude/settings.json -> "statusLine": {"type":"command","command":"node <path>/statusline.mjs"}
