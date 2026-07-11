@@ -20,8 +20,8 @@ Assess the task briefly on these axes:
 Answer **CONCISELY**:
 1. **Recommended level** (one word from the scale; a range if uncertain).
 2. **Why** — max 2 lines, cite the decisive axes.
-3. **How to set it** — change `effortLevel` in `~/.claude/settings.json` (or via `/config`). The
-   current level is in the badge after the model name in the status line.
+3. **How to set it** — run **`/effort`** and pick the level (*Set effort level for model usage*).
+   The current level is in the badge after the model name in the status line.
 
 If the task is mixed (simple parts + complex parts), recommend the level for the **dominant**
 part and flag when it's worth raising/lowering it on the fly.
