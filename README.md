@@ -1,6 +1,6 @@
-# Claude Code — QUOTA-aware status line
+# ⛽ Claude Code Fuel Gauge
 
-> **⛽ Your fuel gauge for Claude Code Pro/Max — know your rate-limit quota before you hit the wall.**
+> **Know your Pro/Max rate-limit quota — and never hit the wall by surprise.**
 
 A single-file, dependency-free status line for [Claude Code](https://claude.com/claude-code)
 built for **subscription** users (Pro / Max), not API users.
