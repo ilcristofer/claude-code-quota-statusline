@@ -2,6 +2,12 @@
 
 > **Know your Pro/Max rate-limit quota — and never hit the wall by surprise.**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-required-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+![Single file](https://img.shields.io/badge/single%20file-statusline.mjs-blue)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
+
 A single-file, dependency-free status line for [Claude Code](https://claude.com/claude-code)
 built for **subscription** users (Pro / Max), not API users.
 
