@@ -54,17 +54,33 @@ if (Test-Path $Settings) {
 
 $CmdPath = ($Dest -replace '\\', '/')      # forward slashes: robust for node on Windows
 $Command = "node `"$CmdPath`""
+# Merge with Node (already required). IMPORTANT: pass the JS via a temp .cjs FILE and the two
+# values via ENV VARS — never as `node -e <string>` / native args. Windows PowerShell mangles the
+# embedded double-quotes when handing a quoted string to a native exe (it corrupted "\n" -> \n,
+# which broke the merge). File + env vars sidestep native-arg quoting entirely. .cjs forces
+# CommonJS so require() works regardless of any package.json in the temp dir.
 $MergeJs = @'
 const fs = require("fs");
-const file = process.argv[1], command = process.argv[2];
+const file = process.env.CC_SL_SETTINGS, command = process.env.CC_SL_COMMAND;
 let s = {};
 try { s = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { s = {}; }
 if (typeof s !== "object" || s === null || Array.isArray(s)) s = {};
 s.statusLine = { type: "command", command: command, padding: 2 };
 fs.writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
 '@
-& node -e $MergeJs $Settings $Command
-if ($LASTEXITCODE -ne 0) { Write-Error "Failed to update settings.json."; exit 1 }
+$MergeTmp = Join-Path ([System.IO.Path]::GetTempPath()) "cc-sl-merge-$PID.cjs"
+Set-Content -Path $MergeTmp -Value $MergeJs -Encoding ascii
+$env:CC_SL_SETTINGS = $Settings
+$env:CC_SL_COMMAND  = $Command
+try {
+  & node $MergeTmp
+  $mergeExit = $LASTEXITCODE
+} finally {
+  Remove-Item $MergeTmp -Force -ErrorAction SilentlyContinue
+  Remove-Item Env:\CC_SL_SETTINGS -ErrorAction SilentlyContinue
+  Remove-Item Env:\CC_SL_COMMAND  -ErrorAction SilentlyContinue
+}
+if ($mergeExit -ne 0) { Write-Error "Failed to update settings.json."; exit 1 }
 
 # 5) Optional companion: /effort-suggest slash command.
 if ($WithEffortSuggest) {
