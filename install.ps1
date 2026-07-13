@@ -82,10 +82,20 @@ try {
 }
 if ($mergeExit -ne 0) { Write-Error "Failed to update settings.json."; exit 1 }
 
-# 5) Optional companion: /effort-suggest slash command.
+# 5) Companion: /quota slash command (installed by default — it's how you read the line).
+$CmdDir = Join-Path $ClaudeDir 'commands'
+New-Item -ItemType Directory -Force -Path $CmdDir | Out-Null
+$DestQuota = Join-Path $CmdDir 'quota.md'
+$LocalQuota = if ($ScriptDir) { Join-Path $ScriptDir 'extras/quota.md' } else { $null }
+if ($LocalQuota -and (Test-Path $LocalQuota)) {
+  Copy-Item $LocalQuota $DestQuota -Force
+} else {
+  Invoke-RestMethod -Uri "$RepoRaw/extras/quota.md" -OutFile $DestQuota
+}
+Write-Host "Installed /quota command to $DestQuota"
+
+# 6) Optional companion: /effort-suggest slash command.
 if ($WithEffortSuggest) {
-  $CmdDir  = Join-Path $ClaudeDir 'commands'
-  New-Item -ItemType Directory -Force -Path $CmdDir | Out-Null
   $DestEff = Join-Path $CmdDir 'effort-suggest.md'
   $LocalEff = if ($ScriptDir) { Join-Path $ScriptDir 'extras/effort-suggest.md' } else { $null }
   if ($LocalEff -and (Test-Path $LocalEff)) {
@@ -99,4 +109,5 @@ if ($WithEffortSuggest) {
 Write-Host ""
 Write-Host "OK  Status line installed to $Dest"
 Write-Host "    settings.json -> statusLine: $Command"
+Write-Host "    Tip: run /quota in Claude Code for an explained breakdown with your real values."
 Write-Host "    Restart Claude Code (or start a new session) to see it."

@@ -17,15 +17,16 @@ built for **subscription** users (Pro / Max), not API users.
 > context-rot risk). This status line drops the `$` entirely and shows you *that* instead.
 
 ```
-Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
+Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% ~14 msg → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
-It renders on **one line** when the terminal is wide enough, and automatically **splits
-into two** when it isn't:
+That **`~14 msg`** is the headline: ≈ how many more prompts you can send before the 5-hour
+window caps, at *your* recent pace. It renders on **one line** when the terminal is wide
+enough, and automatically **splits into two** when it isn't:
 
 ```
 Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k
-5h 20% → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
+5h 20% ~14 msg → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
 When the context grows, the bar changes color by zone and adds an actionable hint plus
@@ -38,6 +39,40 @@ When the context grows, the bar changes color by zone and adds an actionable hin
 Live (colors in a real terminal):
 
 ![Claude Code QUOTA-aware status line](assets/screenshot.png)
+
+## Forgot what a symbol means? Run `/quota`
+
+The line is a *glance*. When you want the whole thing spelled out — with **your real latest
+values** — run the bundled `/quota` slash command. It prints an annotated legend of every
+segment (context, trend sparkline, `~N msg`, Pro projection, weekly pace, reset clock, …):
+
+```
+⛽ Fuel Gauge — how to read your status line
+last render just now · Opus 4.8 (1M context) · xhigh 💭
+
+CONTEXT
+  ctx ▓░░░░░░░░░ 130k/1.0M 13%   context used vs the TRUE model window — colors are risk zones
+      ↗ compact in ~6 turns      at the current growth rate, when you'll cross the /compact line
+  turn 13k                       FRESH tokens this turn (the re-read context is excluded)
+  cache 92%                      share of input served from cache — higher = cheaper & faster
+
+5-HOUR WINDOW
+  5h 24% (+4%)                   quota used · (+X%) burned by THIS session
+  ~38 msg left                   ≈ prompts remaining before the cap, at your recent pace (~2.0%/msg)
+  ▁▂▃▅█                          recent 5h-burn trend (this session)
+  → Pro~120%                     the same usage projected onto the Pro plan (rough ×5 gauge)
+  ↻ 3h59m (15:01)                resets in / at
+
+WEEKLY WINDOW
+  wk 38% (+2%)                   quota used · session delta
+  over pace ⚠                    spent 38% vs ~33% of the week elapsed (steady-spend reference)
+  ↻ 1d3h (Tue 14:00)             resets in / at
+  ◀ binding constraint           of the two windows, this is the one that caps first
+```
+
+`/quota` is installed by the one-command installer. (Manual install: drop `extras/quota.md`
+into `~/.claude/commands/`.) The values come from a tiny snapshot the status line writes on
+each render — so the deep-dive needs no extra API calls.
 
 ## Why
 
@@ -54,6 +89,12 @@ actually run out of is **quota** and **usable context**. So this bar is organize
 Most Claude Code status lines are built around **dollar cost** and are aimed at API users. This
 one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere in the ecosystem:
 
+- **`~N msg` remaining** — your leftover quota translated into *how many more prompts you can send*
+  before the 5-hour window caps, from your own measured pace. Humans think in messages, not
+  percentages. I haven't seen this anywhere else.
+- **`/quota` explained view** — a full annotated legend of every segment, populated with your real
+  values (from a snapshot the line persists — no extra API calls). The line is the glance; `/quota`
+  is the manual.
 - **`Pro~` cross-plan projection** — estimates your current usage against the Pro plan so you can
   see, at a glance, whether Pro would cover you or you're right to be on Max.
 - **`turn` = fresh tokens only** — input + cache-write + output, *excluding* the re-read context.
@@ -71,9 +112,15 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 - **4-color risk scale** (green → yellow → orange → red) on every indicator.
 - **Actionable compaction hints** at absolute thresholds — advisory only, *you* decide.
 - **`↓ N` reclaimable-tokens** estimate once you pass the compact threshold.
+- **`~N msg` remaining** — quota translated into how many more prompts fit before the 5h window
+  caps, at your recent pace (self-gated: appears once there's enough signal to be honest).
+- **`↗ compact ~N` heads-up** — projects context growth and warns ~N turns *before* you'll cross
+  the `/compact` line (only when it's close).
 - **Per-session quota delta** `(+X%)` — how many quota points *this session* burned.
 - **`Pro~` projection** — estimates the same usage against the Pro plan, so you can judge
   whether Pro would be enough (or whether you're safe on Max).
+- **`/quota` explained view** — bundled slash command that prints an annotated legend (with a
+  trend sparkline and a weekly steady-spend pace check) using your real latest values.
 - **Reset countdowns + wall-clock time** `↻ 3h18m (18:42)` — both *how long* until each window
   resets and *at what time* (weekday-prefixed when it's more than ~20h out, e.g. `Wed 09:00`).
 - **Binding-constraint marker** `◀` — flags whichever window (5h vs weekly) is closer to its own
@@ -94,10 +141,12 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 |---|---|---|
 | Model + badge | `Opus 4.8 (1M context) · xhigh 💭` | Model name; effort level; `💭` thinking, `⚡` fast mode |
 | Context bar | `ctx ▓░░░░░░░░░ 67k/1.0M 7%` | Fill + zone colors against the true window; `used/window` and `%` |
+| Compact heads-up | `↗ compact ~6` | ≈ turns until you'll cross the `/compact` line at the current growth (shown only when close) |
 | Compaction hint | `~ compact (save token) ↓ 50k` | Advisory at thresholds; `↓ N` = tokens reclaimable by `/compact` |
 | Cache | `cache 89%` | Share of input served from cache last turn (high = good) |
 | Turn | `turn 7.2k` | **Fresh** tokens this turn (new input + cache write + output; **excludes** the re-read context) |
-| 5h limit | `5h 20% (+6%) → Pro~100%⚠ ↻ 3h18m (18:42) ◀` | 5-hour window %, session delta, Pro-plan projection, reset countdown + wall-clock time; `◀` = binding constraint |
+| Messages left | `~14 msg` | ≈ prompts remaining before the 5h cap, at this session's measured pace (self-gated) |
+| 5h limit | `5h 20% (+6%) ~14 msg → Pro~100%⚠ ↻ 3h18m (18:42) ◀` | 5-hour window %, session delta, messages-left, Pro-plan projection, reset countdown + wall-clock time; `◀` = binding constraint |
 | Weekly limit | `wk 16% ↻ 3d13h (Wed 09:00)` | Weekly window %, session delta, reset countdown + wall-clock time |
 | Burn warning | `⚠ full ~45m` | Shown only if the window will hit 100% before it resets at the session's average pace |
 | *(opt-in)* dir + git | `statusline ⎇ main*` | Project-dir name (`CC_SL_CWD=1`) and git branch + dirty flag (`CC_SL_GIT=1`) |

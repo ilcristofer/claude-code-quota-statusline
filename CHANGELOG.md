@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`~N msg` remaining** — the leftover 5-hour quota translated into how many more prompts you can
+  send at *this session's* measured pace. Headline of the 5h segment; self-gated (appears only once
+  there's enough signal to be honest, like the burn warning).
+- **`↗ compact ~N` heads-up** — projects context growth and flags ~N turns before you'll cross the
+  `/compact` line (shown only when it's close).
+- **`/quota` explained view** — a new `explain` mode of `statusline.mjs` (`node statusline.mjs
+  explain`) prints a full annotated legend of every segment, populated with your real latest values
+  from a snapshot the line persists each render (no extra API calls). Bundled as a `/quota` slash
+  command (`extras/quota.md`), now installed by default by both installers. Includes a per-window
+  **trend sparkline** and a **weekly steady-spend pace** check (`on pace ✓` / `over pace ⚠`).
 - **Wall-clock reset time** next to each countdown — `↻ 3h18m (18:42)`, weekday-prefixed
   (`Wed 09:00`) when the reset is more than ~20h out.
 - **Binding-constraint marker** `◀` on whichever quota window (5h vs weekly) is closer to its own

@@ -83,9 +83,18 @@ s.statusLine = { type: "command", command: command, padding: 2 };
 fs.writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
 ' "$SETTINGS" "$CMD"
 
-# 5) Optional companion: /effort-suggest slash command.
+# 5) Companion: /quota slash command (installed by default — it's how you read the line).
+mkdir -p "$CLAUDE_DIR/commands"
+DEST_QUOTA="$CLAUDE_DIR/commands/quota.md"
+if [ -n "${SCRIPT_DIR:-}" ] && [ -f "$SCRIPT_DIR/extras/quota.md" ]; then
+  cp "$SCRIPT_DIR/extras/quota.md" "$DEST_QUOTA"
+else
+  fetch "$REPO_RAW/extras/quota.md" "$DEST_QUOTA"
+fi
+echo "Installed /quota command to $DEST_QUOTA"
+
+# 6) Optional companion: /effort-suggest slash command.
 if [ "$WITH_EFFORT" -eq 1 ]; then
-  mkdir -p "$CLAUDE_DIR/commands"
   DEST_EFF="$CLAUDE_DIR/commands/effort-suggest.md"
   if [ -n "${SCRIPT_DIR:-}" ] && [ -f "$SCRIPT_DIR/extras/effort-suggest.md" ]; then
     cp "$SCRIPT_DIR/extras/effort-suggest.md" "$DEST_EFF"
@@ -98,4 +107,5 @@ fi
 echo ""
 echo "✓ Status line installed to $DEST"
 echo "  settings.json -> statusLine: $CMD"
+echo "  Tip: run /quota in Claude Code for an explained breakdown with your real values."
 echo "  Restart Claude Code (or start a new session) to see it."
