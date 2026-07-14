@@ -16,12 +16,14 @@ CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 DEST="$CLAUDE_DIR/statusline.mjs"
 SETTINGS="$CLAUDE_DIR/settings.json"
 WITH_EFFORT=0
+WITH_SAFECLEAR=0
 
 for arg in "$@"; do
   case "$arg" in
     --with-effort-suggest) WITH_EFFORT=1 ;;
+    --with-safe-clear) WITH_SAFECLEAR=1 ;;
     -h|--help)
-      echo "Usage: install.sh [--with-effort-suggest]"
+      echo "Usage: install.sh [--with-effort-suggest] [--with-safe-clear]"
       exit 0 ;;
     *)
       echo "Unknown option: $arg" >&2
@@ -73,7 +75,7 @@ if [ -f "$SETTINGS" ]; then
 fi
 
 CMD="node \"$DEST\""
-node -e '
+CC_SL_SAFECLEAR="$WITH_SAFECLEAR" node -e '
 const fs = require("fs");
 const file = process.argv[1], command = process.argv[2];
 let s = {};
@@ -83,6 +85,15 @@ if (typeof s !== "object" || s === null || Array.isArray(s)) s = {};
 // Preserve a value the user already set; default to 30 on a fresh install.
 var ri = (s.statusLine && typeof s.statusLine.refreshInterval === "number" && s.statusLine.refreshInterval >= 1) ? s.statusLine.refreshInterval : 30;
 s.statusLine = { type: "command", command: command, padding: 2, refreshInterval: ri };
+// Opt-in safe-clear: register the SessionStart(clear) hook that auto-restores the /preclear handoff.
+// Preserve every other hook; idempotent (drop any prior cc-sl restore-handoff group, then add ours).
+if (process.env.CC_SL_SAFECLEAR === "1") {
+  if (typeof s.hooks !== "object" || s.hooks === null || Array.isArray(s.hooks)) s.hooks = {};
+  var ss = Array.isArray(s.hooks.SessionStart) ? s.hooks.SessionStart : [];
+  ss = ss.filter(function (g) { return !(g && Array.isArray(g.hooks) && g.hooks.some(function (h) { return h && typeof h.command === "string" && h.command.indexOf("restore-handoff") !== -1; })); });
+  ss.push({ matcher: "clear", hooks: [ { type: "command", command: command + " restore-handoff" } ] });
+  s.hooks.SessionStart = ss;
+}
 fs.writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
 ' "$SETTINGS" "$CMD"
 
@@ -107,8 +118,20 @@ if [ "$WITH_EFFORT" -eq 1 ]; then
   echo "Installed /effort-suggest command to $DEST_EFF"
 fi
 
+# 7) Optional companion: /preclear safe-clear command (the SessionStart hook was wired in step 4).
+if [ "$WITH_SAFECLEAR" -eq 1 ]; then
+  DEST_PC="$CLAUDE_DIR/commands/preclear.md"
+  if [ -n "${SCRIPT_DIR:-}" ] && [ -f "$SCRIPT_DIR/extras/preclear.md" ]; then
+    cp "$SCRIPT_DIR/extras/preclear.md" "$DEST_PC"
+  else
+    fetch "$REPO_RAW/extras/preclear.md" "$DEST_PC"
+  fi
+  echo "Installed /preclear command to $DEST_PC (+ SessionStart auto-restore hook)"
+fi
+
 echo ""
 echo "✓ Status line installed to $DEST"
 echo "  settings.json -> statusLine: $CMD"
 echo "  Tip: run /quota in Claude Code for an explained breakdown with your real values."
+[ "$WITH_SAFECLEAR" -eq 1 ] && echo "  Tip: run /preclear before a /clear to wrap up safely (handoff auto-restores after)."
 echo "  Restart Claude Code (or start a new session) to see it."

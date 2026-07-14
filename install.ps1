@@ -10,7 +10,7 @@
 # What it does: copies statusline.mjs into ~/.claude/, then merges ONLY the "statusLine"
 # key into ~/.claude/settings.json (backing it up first) — everything else is preserved.
 # The JSON merge is done with Node, which is required anyway (the status line runs on it).
-param([switch]$WithEffortSuggest)
+param([switch]$WithEffortSuggest, [switch]$WithSafeClear)
 
 $ErrorActionPreference = 'Stop'
 
@@ -69,12 +69,22 @@ if (typeof s !== "object" || s === null || Array.isArray(s)) s = {};
 // Preserve a value the user already set; default to 30 on a fresh install.
 var ri = (s.statusLine && typeof s.statusLine.refreshInterval === "number" && s.statusLine.refreshInterval >= 1) ? s.statusLine.refreshInterval : 30;
 s.statusLine = { type: "command", command: command, padding: 2, refreshInterval: ri };
+// Opt-in safe-clear: register the SessionStart(clear) hook that auto-restores the /preclear handoff.
+// Preserve every other hook; idempotent (drop any prior cc-sl restore-handoff group, then add ours).
+if (process.env.CC_SL_SAFECLEAR === "1") {
+  if (typeof s.hooks !== "object" || s.hooks === null || Array.isArray(s.hooks)) s.hooks = {};
+  var ss = Array.isArray(s.hooks.SessionStart) ? s.hooks.SessionStart : [];
+  ss = ss.filter(function (g) { return !(g && Array.isArray(g.hooks) && g.hooks.some(function (h) { return h && typeof h.command === "string" && h.command.indexOf("restore-handoff") !== -1; })); });
+  ss.push({ matcher: "clear", hooks: [ { type: "command", command: command + " restore-handoff" } ] });
+  s.hooks.SessionStart = ss;
+}
 fs.writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
 '@
 $MergeTmp = Join-Path ([System.IO.Path]::GetTempPath()) "cc-sl-merge-$PID.cjs"
 Set-Content -Path $MergeTmp -Value $MergeJs -Encoding ascii
 $env:CC_SL_SETTINGS = $Settings
 $env:CC_SL_COMMAND  = $Command
+$env:CC_SL_SAFECLEAR = if ($WithSafeClear) { '1' } else { '0' }
 try {
   & node $MergeTmp
   $mergeExit = $LASTEXITCODE
@@ -82,6 +92,7 @@ try {
   Remove-Item $MergeTmp -Force -ErrorAction SilentlyContinue
   Remove-Item Env:\CC_SL_SETTINGS -ErrorAction SilentlyContinue
   Remove-Item Env:\CC_SL_COMMAND  -ErrorAction SilentlyContinue
+  Remove-Item Env:\CC_SL_SAFECLEAR -ErrorAction SilentlyContinue
 }
 if ($mergeExit -ne 0) { Write-Error "Failed to update settings.json."; exit 1 }
 
@@ -109,8 +120,21 @@ if ($WithEffortSuggest) {
   Write-Host "Installed /effort-suggest command to $DestEff"
 }
 
+# 7) Optional companion: /preclear safe-clear command (the SessionStart hook was wired in step 4).
+if ($WithSafeClear) {
+  $DestPc = Join-Path $CmdDir 'preclear.md'
+  $LocalPc = if ($ScriptDir) { Join-Path $ScriptDir 'extras/preclear.md' } else { $null }
+  if ($LocalPc -and (Test-Path $LocalPc)) {
+    Copy-Item $LocalPc $DestPc -Force
+  } else {
+    Invoke-RestMethod -Uri "$RepoRaw/extras/preclear.md" -OutFile $DestPc
+  }
+  Write-Host "Installed /preclear command to $DestPc (+ SessionStart auto-restore hook)"
+}
+
 Write-Host ""
 Write-Host "OK  Status line installed to $Dest"
 Write-Host "    settings.json -> statusLine: $Command"
 Write-Host "    Tip: run /quota in Claude Code for an explained breakdown with your real values."
+if ($WithSafeClear) { Write-Host "    Tip: run /preclear before a /clear to wrap up safely (handoff auto-restores after)." }
 Write-Host "    Restart Claude Code (or start a new session) to see it."

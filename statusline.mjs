@@ -22,7 +22,7 @@
 // latest values (read from a snapshot the normal render persists each time). The line stays
 // lean = a glance; `explain` (wired to a /quota slash command) is the full, spelled-out manual.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execSync, spawn } from 'node:child_process'; // execSync: opt-in git segment; spawn: detached update check
@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';               // locate this file when
 
 // Tool version. BUMP on each release + push to main: installed clients compare this against main's
 // VERSION and show a "⬆ vX.Y.Z" nudge (see the update-check block below).
-const VERSION = '0.10.1';
+const VERSION = '0.11.0';
 
 // SUGGESTION thresholds (absolute, in tokens) — override via env, else default.
 // They DON'T force anything: they color the bar and suggest. The actual compaction is
@@ -89,7 +89,8 @@ const ctxBar = (used, win, pct, hintCompact, hintClear) => {
   const W = 10, filled = Math.max(0, Math.min(W, Math.round(pct / 10)));
   const zc = (tok) => (tok >= win * 0.9 ? Rd : tok >= hintClear ? O : tok >= hintCompact ? Y : G);
   let bar = '';
-  for (let i = 0; i < W; i++) bar += `${zc((i + 0.5) / W * win)}${i < filled ? '▓' : '░'}${R}`;
+  // filled = SOLID full block (█) so the occupied level reads clearly; empty = faint ░ for contrast.
+  for (let i = 0; i < W; i++) bar += `${zc((i + 0.5) / W * win)}${i < filled ? '█' : '░'}${R}`;
   return bar;
 };
 // Micro trend sparkline from a numeric history. Block glyphs are SINGLE-cell (safe width).
@@ -121,6 +122,12 @@ const EXPLAIN_FILE = join(tmpdir(), 'cc-sl-explain.json');
 const PACE_FILE = join(tmpdir(), 'cc-sl-pace.json');
 const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return {}; } };
 
+// Safe-clear handoff store (see the /preclear command + the SessionStart(clear) hook). Keyed by
+// PROJECT (cwd), NOT session_id: /clear starts a NEW session id, so the writer (old session) and the
+// reader (the SessionStart hook in the new session) only share the cwd. tmpdir survives a /clear.
+const handoffKeyFor = (dir) => (String(dir || 'default').replace(/[^a-zA-Z0-9]/g, '_').slice(-64) || 'default');
+const handoffFileFor = (dir) => join(tmpdir(), 'cc-sl-handoff-' + handoffKeyFor(dir) + '.md');
+
 // ── Update check (default on; CC_SL_UPDATE=0 disables) ────────────────────────────────────
 // The render reads UPDATE_FILE (instant) to decide whether to show "⬆ vX"; at most once/day it
 // fires a DETACHED child (mode "checkupdate") that refreshes it. The line NEVER waits on network.
@@ -150,6 +157,35 @@ function checkUpdate() {
   });
   req.on('error', () => { /* offline / DNS / TLS: ignore */ });
   req.on('timeout', () => req.destroy());
+}
+
+// ── Safe-clear handoff (mode "handoff-file" + "restore-handoff") ────────────────────────────
+// `handoff-file`: prints the per-project path where /preclear should Write the handoff. Keyed off
+// the CURRENT cwd (the command's `!` shell runs at the project root, matching the hook's stdin cwd).
+function printHandoffPath() {
+  try { process.stdout.write(handoffFileFor(process.cwd())); } catch { /* never throw */ }
+}
+// `restore-handoff`: the SessionStart(clear) hook target. If a FRESH handoff exists for this project,
+// emit it as additionalContext (Claude Code injects it into the post-/clear session) and consume it
+// (delete = restore exactly once). Never throws; prints nothing when there's nothing to restore.
+function restoreHandoff() {
+  let input = '';
+  process.stdin.on('data', (c) => (input += c));
+  process.stdin.on('end', () => {
+    try {
+      let cwd = process.cwd();
+      try { const d = JSON.parse(input || '{}'); if (d.cwd) cwd = d.cwd; } catch { /* keep process.cwd */ }
+      const f = handoffFileFor(cwd);
+      let text = '';
+      try { text = readFileSync(f, 'utf8'); } catch { return; } // no handoff for this project → silent
+      let ageMs = 0;
+      try { ageMs = Date.now() - statSync(f).mtimeMs; } catch { /* no stat → treat as fresh */ }
+      try { unlinkSync(f); } catch { /* best effort: consume-once even if stale */ }
+      if (!text.trim() || ageMs > 6 * 3600 * 1000) return; // stale (>6h) or empty: drop, inject nothing
+      const ctx = text.length > 9500 ? text.slice(0, 9500) + '\n…(truncated)' : text; // 10k hook cap
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } }));
+    } catch { /* never throw: SessionStart must not break */ }
+  });
 }
 
 // ── EXPLAIN VIEW: annotated legend with the user's real latest values ─────────────────────
@@ -239,6 +275,10 @@ function printExplain() {
 const mode = process.argv[2];
 if (mode === 'checkupdate') {
   try { checkUpdate(); } catch { /* detached child: never throw */ }
+} else if (mode === 'handoff-file') {
+  try { printHandoffPath(); } catch { /* never throw */ }
+} else if (mode === 'restore-handoff') {
+  try { restoreHandoff(); } catch { /* never throw: SessionStart must not break */ }
 } else if (mode === 'explain' || mode === '--explain' || mode === 'legend' || mode === '--legend') {
   try { printExplain(); } catch { /* never throw: manual view degrades to nothing */ }
 } else {

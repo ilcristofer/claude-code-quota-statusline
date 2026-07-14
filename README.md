@@ -17,7 +17,7 @@ built for **subscription** users (Pro / Max), not API users.
 > context-rot risk). This status line drops the `$` entirely and shows you *that* instead.
 
 ```
-Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
+Opus 4.8 (1M context) · xhigh 💭  ctx █░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
 That **`~14 msg`** is the headline: ≈ how many more prompts you can send before the 5-hour
@@ -25,7 +25,7 @@ window caps, at *your* recent pace. It renders on **one line** when the terminal
 enough, and automatically **splits into two** when it isn't:
 
 ```
-Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k
+Opus 4.8 (1M context) · xhigh 💭  ctx █░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k
 5h 20% ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
@@ -33,7 +33,7 @@ When the context grows, the bar changes color by zone and adds an actionable hin
 `↓ N` = how many tokens you could reclaim by compacting:
 
 ```
-… ctx ▓▓▓▓▓░░░░░ 455k/1.0M 45% ⚠ compact! (context rot!) ↓ 255k …
+… ctx █████░░░░░ 455k/1.0M 45% ⚠ compact! (context rot!) ↓ 255k …
 ```
 
 Live (colors in a real terminal):
@@ -51,7 +51,7 @@ segment (context, trend sparkline, `~N msg`, Pro projection, weekly pace, reset 
 last render just now · Opus 4.8 (1M context) · xhigh 💭
 
 CONTEXT
-  ctx ▓░░░░░░░░░ 130k/1.0M 13%   context used vs the TRUE model window — colors are risk zones
+  ctx █░░░░░░░░░ 130k/1.0M 13%   context used vs the TRUE model window — colors are risk zones
       ↗ compact in ~6 turns      at the current growth rate, when you'll cross the /compact line
   turn 13k                       FRESH tokens this turn (the re-read context is excluded)
   cache 92%                      share of input served from cache — higher = cheaper & faster
@@ -149,7 +149,7 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 | Segment | Example | Meaning |
 |---|---|---|
 | Model + badge | `Opus 4.8 (1M context) · xhigh 💭` | Model name; effort level; `💭` thinking, `⚡` fast mode |
-| Context bar | `ctx ▓░░░░░░░░░ 67k/1.0M 7%` | Fill + zone colors against the true window; `used/window` and `%` |
+| Context bar | `ctx █░░░░░░░░░ 67k/1.0M 7%` | Fill + zone colors against the true window; `used/window` and `%` |
 | Compact heads-up | `↗ compact ~6` | ≈ turns until you'll cross the `/compact` line at the current growth (shown only when close) |
 | Compaction hint | `~ compact (save token) ↓ 50k` | Advisory at thresholds; `↓ N` = tokens reclaimable by `/compact` |
 | Cache | `cache 89%` | Share of input served from cache last turn (high = good) |
@@ -314,6 +314,32 @@ file in the temp dir (`used_percentage` is account-global, so the per-message ra
 otherwise the number would jump between windows). A second *machine* can't share that file, so if
 its usage moves the quota while this machine is idle, the line flags `~N msg` with `‖` and reads
 conservatively rather than pretending it can see the other device.
+
+## Companion: `/preclear` — a safe wrap-up before `/clear`
+
+`extras/preclear.md` is an optional slash command that prepares a session to be `/clear`ed
+**safely**, then hands off so you don't lose context or scope. One command:
+
+- checks for **uncommitted work** and offers to commit (on your confirmation);
+- flags whether **docs / memory** need a quick update;
+- recommends **clear vs compact** for your situation;
+- writes a concise **handoff** (goal, decisions + why, exact paths/commands, open threads, your
+  preferences) that **auto-restores into the next session** — so after you type `/clear`, the fresh
+  session already knows where you left off, with zero copy-paste.
+
+The auto-restore uses a `SessionStart` hook (`node statusline.mjs restore-handoff`) that injects the
+handoff exactly once, then consumes it. `/clear` itself still has to be typed by you — Claude Code
+doesn't allow a command or hook to trigger it — but everything around it is handled.
+
+Enable it at install time (it adds the command **and** the hook; both are opt-in so the default
+install is unchanged):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.sh | sh -s -- --with-safe-clear
+```
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.ps1))) -WithSafeClear
+```
 
 ## Companion: `/effort-suggest`
 
