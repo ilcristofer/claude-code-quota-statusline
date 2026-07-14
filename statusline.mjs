@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';               // locate this file when
 
 // Tool version. BUMP on each release + push to main: installed clients compare this against main's
 // VERSION and show a "⬆ vX.Y.Z" nudge (see the update-check block below).
-const VERSION = '0.9.0';
+const VERSION = '0.9.10';
 
 // SUGGESTION thresholds (absolute, in tokens) — override via env, else default.
 // They DON'T force anything: they color the bar and suggest. The actual compaction is
@@ -184,7 +184,7 @@ function printExplain() {
       out.push(`  ${col4inv(f.msgLeft, 20, 10, 5)}~${f.msgLeft > 99 ? '99+' : f.msgLeft} msg left${R}   ${DIM}≈ prompts remaining before the cap, at your recent pace${f.perTurn ? ` (~${f.perTurn.toFixed(1)}%/msg)` : ''}${R}`);
     const sp = spark(f.spark);
     if (sp) out.push(`  ${sp}   ${DIM}recent 5h-burn trend (this session)${R}`);
-    out.push(`  ${DIM}→${R} Pro~${f.pro}%   ${DIM}the same usage projected onto the Pro plan (rough ×${PRO_FACTOR} gauge)${R}`);
+    out.push(`  ${DIM}→${R} (${!f.stale && f.pro >= 100 ? '⚠  ' : ''}Pro~${f.pro}%)   ${DIM}the same usage projected onto the Pro plan (rough ×${PRO_FACTOR} gauge)${R}`);
     if (f.burnMs != null) out.push(`  ${O}⚠ full ~${left(f.burnMs)}${R}   ${DIM}at this pace it would cap BEFORE it resets${R}`);
     const rm = f.resetAt ? f.resetAt * 1000 - nowMs : f.resetMs;
     if (rm > 0) out.push(`  ${GR}↻ ${left(rm)}${f.resetAt ? ` (${clock(f.resetAt, nowMs)})` : ''}${R}   ${DIM}resets in / at${R}`);
@@ -461,7 +461,7 @@ function renderFromStdin() {
       if (!stF && msgLeftFive != null) s += ` ${col4inv(msgLeftFive, 20, 10, 5)}~${msgLeftFive > 99 ? '99+' : msgLeftFive} msg${R}`;
       const pro = Math.round(p * PRO_FACTOR);
       const pc = stF ? GR : col4(pro, 60, 90, 100);
-      s += ` ${DIM}→${R} ${pc}Pro~${pro}%${!stF && pro >= 100 ? '⚠ ' : ''}${R}`;
+      s += ` ${DIM}→${R} ${pc}(${!stF && pro >= 100 ? '⚠  ' : ''}Pro~${pro}%)${R}`;
       if (bwFive != null) s += ` ${O}${B}⚠ full ~${left(bwFive)}${R}`;
       const t = pickFive.resets_at * 1000 - now;
       if (t > 0) s += ` ${GR}↻ ${left(t)} (${clock(pickFive.resets_at, now)})${R}`;

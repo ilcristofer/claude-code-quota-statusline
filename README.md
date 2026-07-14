@@ -17,7 +17,7 @@ built for **subscription** users (Pro / Max), not API users.
 > context-rot risk). This status line drops the `$` entirely and shows you *that* instead.
 
 ```
-Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% ~14 msg → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
+Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k  5h 20% ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
 That **`~14 msg`** is the headline: ≈ how many more prompts you can send before the 5-hour
@@ -26,7 +26,7 @@ enough, and automatically **splits into two** when it isn't:
 
 ```
 Opus 4.8 (1M context) · xhigh 💭  ctx ▓░░░░░░░░░ 67k/1.0M 7%  cache 89%  turn 7.2k
-5h 20% ~14 msg → Pro~100%⚠  ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
+5h 20% ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) · wk 16% ↻ 3d13h (Wed 09:00)
 ```
 
 When the context grows, the bar changes color by zone and adds an actionable hint plus
@@ -60,7 +60,7 @@ CONTEXT
   5h 24% (+4%)                   quota used · (+X%) burned by THIS session
   ~38 msg left                   ≈ prompts remaining before the cap, at your recent pace (~2.0%/msg)
   ▁▂▃▅█                          recent 5h-burn trend (this session)
-  → Pro~120%                     the same usage projected onto the Pro plan (rough ×5 gauge)
+  → (⚠  Pro~120%)                the same usage projected onto the Pro plan (rough ×5 gauge)
   ↻ 3h59m (15:01)                resets in / at
 
 WEEKLY WINDOW
@@ -149,7 +149,7 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 | Cache | `cache 89%` | Share of input served from cache last turn (high = good) |
 | Turn | `turn 7.2k` | **Fresh** tokens this turn (new input + cache write + output; **excludes** the re-read context) |
 | Messages left | `~14 msg` | ≈ prompts remaining before the 5h cap, at this session's measured pace (self-gated) |
-| 5h limit | `5h 20% (+6%) ~14 msg → Pro~100%⚠ ↻ 3h18m (18:42) ◀` | 5-hour window %, session delta, messages-left, Pro-plan projection, reset countdown + wall-clock time; `◀` = binding constraint |
+| 5h limit | `5h 20% (+6%) ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) ◀` | 5-hour window %, session delta, messages-left, Pro-plan projection, reset countdown + wall-clock time; `◀` = binding constraint |
 | Weekly limit | `wk 16% ↻ 3d13h (Wed 09:00)` | Weekly window %, session delta, reset countdown + wall-clock time |
 | Burn warning | `⚠ full ~45m` | Shown only if the window will hit 100% before it resets at the session's average pace |
 | *(opt-in)* dir + git | `statusline ⎇ main*` | Project-dir name (`CC_SL_CWD=1`) and git branch + dirty flag (`CC_SL_GIT=1`) |
