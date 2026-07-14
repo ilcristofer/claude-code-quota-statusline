@@ -127,7 +127,8 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 - **`/quota` explained view** — bundled slash command that prints an annotated legend (with a
   trend sparkline and a weekly steady-spend pace check) using your real latest values.
 - **Reset countdowns + wall-clock time** `↻ 3h18m (18:42)` — both *how long* until each window
-  resets and *at what time* (weekday-prefixed when it's more than ~20h out, e.g. `Wed 09:00`).
+  resets and *at what time* (weekday-prefixed when it's more than ~20h out, e.g. `Wed 09:00`). The
+  countdown **ticks down live while you're idle** (the installer sets `refreshInterval`; see below).
 - **Binding-constraint marker** `◀` — flags whichever window (5h vs weekly) is closer to its own
   cap, i.e. the one that will bite first (only when it's ≥50% and there's a real gap).
 - **Burn-rate warning** `⚠ full ~45m` — if, at your *recent* average pace, a window would hit
@@ -259,6 +260,19 @@ they won't trigger usefully — lower them (e.g. `40000` / `120000`).
 > **`Pro~` is an estimate, not a guarantee.** The default `×5` factor comes from one user's
 > measured ratio and is not published by Anthropic. Treat it as a rough gauge and recalibrate
 > `CC_SL_PRO_FACTOR` against your own numbers.
+
+### Live countdowns (`refreshInterval`)
+
+The installer sets `refreshInterval: 30` on the `statusLine` block in `settings.json`, so Claude
+Code re-runs the line every 30 seconds *in addition to* its event-driven updates — the reset
+countdowns (`↻ 3h18m`) keep ticking down while you're idle at the prompt instead of freezing until
+the next message. It's purely a wall-clock refresh: quota `%` and context don't change until the
+next real turn (Claude Code only recomputes those from a fresh API response). Tune it in
+`settings.json` (integer seconds, minimum `1`) or remove the key to render on events only:
+
+```json
+"statusLine": { "type": "command", "command": "node …/statusline.mjs", "padding": 2, "refreshInterval": 30 }
+```
 
 ## Recommended: let *yourself* control compaction
 

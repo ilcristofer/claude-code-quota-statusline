@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';               // locate this file when
 
 // Tool version. BUMP on each release + push to main: installed clients compare this against main's
 // VERSION and show a "⬆ vX.Y.Z" nudge (see the update-check block below).
-const VERSION = '0.10.0';
+const VERSION = '0.10.1';
 
 // SUGGESTION thresholds (absolute, in tokens) — override via env, else default.
 // They DON'T force anything: they color the bar and suggest. The actual compaction is

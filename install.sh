@@ -79,7 +79,10 @@ const file = process.argv[1], command = process.argv[2];
 let s = {};
 try { s = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { s = {}; }
 if (typeof s !== "object" || s === null || Array.isArray(s)) s = {};
-s.statusLine = { type: "command", command: command, padding: 2 };
+// refreshInterval (seconds, min 1) re-runs the line on a timer so reset countdowns tick while idle.
+// Preserve a value the user already set; default to 30 on a fresh install.
+var ri = (s.statusLine && typeof s.statusLine.refreshInterval === "number" && s.statusLine.refreshInterval >= 1) ? s.statusLine.refreshInterval : 30;
+s.statusLine = { type: "command", command: command, padding: 2, refreshInterval: ri };
 fs.writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
 ' "$SETTINGS" "$CMD"
 
