@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';               // locate this file when
 
 // Tool version. BUMP on each release + push to main: installed clients compare this against main's
 // VERSION and show a "⬆ vX.Y.Z" nudge (see the update-check block below).
-const VERSION = '0.9.10';
+const VERSION = '0.10.0';
 
 // SUGGESTION thresholds (absolute, in tokens) — override via env, else default.
 // They DON'T force anything: they color the bar and suggest. The actual compaction is
@@ -113,6 +113,14 @@ const ago = (ms, nowMs) => {
 // sessions): `explain` runs as a separate process with no stdin payload, so it can only read this.
 const EXPLAIN_FILE = join(tmpdir(), 'cc-sl-explain.json');
 
+// Shared, MACHINE-GLOBAL quota-pace state (Tier 0): the turn counter, the per-window baselines and
+// the burn histories live here — NOT in the per-session file — so several Claude Code windows on the
+// same machine POOL one honest per-turn rate instead of each measuring the account-global % against
+// only its own turns (which made "~N msg" jump between windows). Read is best-effort: a corrupt or
+// absent file degrades to {} and the state rebuilds on the next render.
+const PACE_FILE = join(tmpdir(), 'cc-sl-pace.json');
+const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return {}; } };
+
 // ── Update check (default on; CC_SL_UPDATE=0 disables) ────────────────────────────────────
 // The render reads UPDATE_FILE (instant) to decide whether to show "⬆ vX"; at most once/day it
 // fires a DETACHED child (mode "checkupdate") that refreshes it. The line NEVER waits on network.
@@ -150,7 +158,7 @@ const EXAMPLE = {
   ts: 0, model: 'Opus 4.8 (1M context)', eff: 'xhigh', thinking: true, fast: false,
   ctx: { used: 67000, win: 1000000, pct: 7, hintCompact: 200000, hintClear: 400000, compactIn: 6 },
   cache: 89, turn: 7200, turns: 12,
-  five: { pct: 20, stale: false, delta: 6, pro: 100, msgLeft: 14, perTurn: 1.4, burnMs: null, resetAt: null, resetMs: 3 * 3600000 + 59 * 60000, spark: [12, 14, 15, 17, 20], binding: false },
+  five: { pct: 20, stale: false, delta: 6, pro: 100, msgLeft: 14, perTurn: 1.4, burnMs: null, resetAt: null, resetMs: 3 * 3600000 + 59 * 60000, spark: [12, 14, 15, 17, 20], binding: false, contested: false, pooled: 1 },
   seven: { pct: 38, stale: false, delta: 1, pace: { expected: 33, over: true }, burnMs: null, resetAt: null, resetMs: 27 * 3600000, spark: [34, 35, 36, 37, 38], binding: true },
 };
 
@@ -179,11 +187,15 @@ function printExplain() {
   if (snap.five) {
     const f = snap.five;
     out.push(`${B}5-HOUR WINDOW${R}`);
-    out.push(`  5h ${Math.round(f.pct)}%${f.stale ? ' *' : ''}${f.delta ? ` (+${f.delta}%)` : ''}   ${DIM}quota used${f.delta ? ' · (+X%) = burned by THIS session' : ''}${f.stale ? ' · * = stale (before the first API round-trip)' : ''}${R}`);
+    out.push(`  5h ${Math.round(f.pct)}%${f.stale ? ' *' : ''}${f.delta ? ` (+${f.delta}%)` : ''}   ${DIM}quota used${f.delta ? ' · (+X%) = burned this window' : ''}${f.stale ? ' · * = stale (before the first API round-trip)' : ''}${R}`);
     if (f.msgLeft != null)
-      out.push(`  ${col4inv(f.msgLeft, 20, 10, 5)}~${f.msgLeft > 99 ? '99+' : f.msgLeft} msg left${R}   ${DIM}≈ prompts remaining before the cap, at your recent pace${f.perTurn ? ` (~${f.perTurn.toFixed(1)}%/msg)` : ''}${R}`);
+      out.push(`  ${col4inv(f.msgLeft, 20, 10, 5)}~${f.msgLeft > 99 ? '99+' : f.msgLeft} msg left${f.contested ? ' ‖' : ''}${R}   ${DIM}≈ prompts remaining before the cap, at your recent pace${f.perTurn ? ` (~${f.perTurn.toFixed(1)}%/msg)` : ''}${R}`);
+    if (f.pooled > 1)
+      out.push(`  ${DIM}pooled across ${f.pooled} sessions on this machine — the per-msg pace is shared, so "~N msg" stays honest with several windows open${R}`);
+    if (f.contested)
+      out.push(`  ${Y}‖ contested${R}   ${DIM}quota is also being spent somewhere this machine can't see (another device) — "~N msg" then reads conservatively${R}`);
     const sp = spark(f.spark);
-    if (sp) out.push(`  ${sp}   ${DIM}recent 5h-burn trend (this session)${R}`);
+    if (sp) out.push(`  ${sp}   ${DIM}recent 5h-burn trend (this machine)${R}`);
     out.push(`  ${DIM}→${R} (${!f.stale && f.pro >= 100 ? '⚠  ' : ''}Pro~${f.pro}%)   ${DIM}the same usage projected onto the Pro plan (rough ×${PRO_FACTOR} gauge)${R}`);
     if (f.burnMs != null) out.push(`  ${O}⚠ full ~${left(f.burnMs)}${R}   ${DIM}at this pace it would cap BEFORE it resets${R}`);
     const rm = f.resetAt ? f.resetAt * 1000 - nowMs : f.resetMs;
@@ -195,7 +207,7 @@ function printExplain() {
   if (snap.seven) {
     const w = snap.seven;
     out.push(`${B}WEEKLY WINDOW${R}`);
-    out.push(`  wk ${Math.round(w.pct)}%${w.stale ? ' *' : ''}${w.delta ? ` (+${w.delta}%)` : ''}   ${DIM}quota used${w.delta ? ' · session delta' : ''}${R}`);
+    out.push(`  wk ${Math.round(w.pct)}%${w.stale ? ' *' : ''}${w.delta ? ` (+${w.delta}%)` : ''}   ${DIM}quota used${w.delta ? ' · (+X%) = burned this window' : ''}${R}`);
     if (w.pace)
       out.push(`  ${w.pace.over ? O : G}${w.pace.over ? 'over pace ⚠' : 'on pace ✓'}${R}   ${DIM}spent ${Math.round(w.pct)}% vs ~${Math.round(w.pace.expected)}% of the week elapsed (steady-spend reference)${R}`);
     const sp = spark(w.spark);
@@ -207,7 +219,7 @@ function printExplain() {
     out.push('');
   }
 
-  out.push(`${DIM}Symbols: ↓N = tokens /compact would reclaim · ◀ = window that caps first · * = stale · colors run green → yellow → orange → red by risk.${R}`);
+  out.push(`${DIM}Symbols: ↓N = tokens /compact would reclaim · ◀ = window that caps first · ‖ = quota contested by another device · * = stale · colors run green → yellow → orange → red by risk.${R}`);
 
   // version / update status (read the update cache directly; explain runs as its own process)
   let vLine = `${DIM}⛽ Fuel Gauge v${VERSION}${R}`;
@@ -345,44 +357,74 @@ function renderFromStdin() {
     const stF = !liveFive && !!pickFive, stW = !liveSeven && !!pickSeven;
     const mk = (st) => (st ? `${DIM}*${R}` : '');
 
-    // Per-session state file (key = session): baselines + turn counter + trend histories.
+    // Per-session state file: ONLY the context-growth ring (context is session-specific — each
+    // window has its own conversation). The QUOTA pace lives in the shared PACE_FILE (Tier 0).
     const sid = String(d.session_id || d.cwd || 'default').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40);
     const baseFile = join(tmpdir(), `cc-sl-${sid}.json`);
-    let base = {};
-    try { base = JSON.parse(readFileSync(baseFile, 'utf8')); } catch { /* first time */ }
+    let base = readJson(baseFile);
+    let pace = readJson(PACE_FILE);
 
-    // Turn counter via prompt_id (one "turn" = one user prompt, regardless of how many renders it
-    // triggers). Drives "~N msg" and "↗ compact ~N". On a NEW turn we also append trend samples.
     const pid = d.prompt_id;
-    const isNewTurn = pid != null && pid !== base._pid;
-    if (isNewTurn) {
-      base._turns = (base._turns || 0) + 1;
+    // LOCAL turn = this window's prompt changed -> sample THIS session's context growth (for "↗ compact
+    // ~N"). A single window never re-renders an old pid, so single-slot tracking is safe here.
+    const isLocalTurn = pid != null && pid !== base._pid;
+    if (isLocalTurn) {
       base._pid = pid;
-      if (liveFive) base.h5 = [...(base.h5 || []), liveFive.used_percentage].slice(-16);
-      if (liveSeven) base.hw = [...(base.hw || []), liveSeven.used_percentage].slice(-16);
       base.hc = [...(base.hc || []), used].slice(-8);
     }
-    const turnN = base._turns || 0;
 
-    // Per-session quota baseline (key = resets_at, so at the window reset the count restarts clean).
-    // turn0 = the turn number when the baseline was set -> lets us measure %-per-turn burn.
+    // GLOBAL turn = a prompt_id we've never counted on this machine (prompt_id is a global UUID).
+    // A SET of recent pids (not a single last-pid) is REQUIRED: with two windows open, each re-renders
+    // the other's current pid in alternation, so single-slot tracking would count every render as a
+    // new turn. Bounded to the last 100 distinct prompts (UUIDs never repeat -> no double count).
+    const seenPids = pace._pids || [];
+    const isGlobalTurn = pid != null && !seenPids.includes(pid);
+    if (isGlobalTurn) {
+      pace._turns = (pace._turns || 0) + 1;
+      pace._pids = [...seenPids, pid].slice(-100);
+      if (liveFive) pace.h5 = [...(pace.h5 || []), liveFive.used_percentage].slice(-16);
+      if (liveSeven) pace.hw = [...(pace.hw || []), liveSeven.used_percentage].slice(-16);
+      // remember which sessions are actively contributing turns (multi-session awareness)
+      pace._recent = [...(pace._recent || []).filter((r) => r && r.sid !== sid && now - r.ts < 15 * 60000), { sid, ts: now }].slice(-8);
+    }
+    const turnN = pace._turns || 0;
+    const activeSessions = 1 + (pace._recent || []).filter((r) => r && r.sid !== sid && now - r.ts < 10 * 60000).length;
+
+    // Contention detector (multi-MACHINE, rare): another machine can't share this filesystem, so its
+    // turns never enter our counter — but its burn DOES raise the account-global %. Robust signal: the
+    // % climbed across a LONG idle gap while the GLOBAL turn counter stayed put (so no LOCAL window
+    // burned it either). During our own active turns renders are frequent -> small gaps -> excluded;
+    // an idle single machine burns nothing -> % flat -> excluded. Thresholds are deliberately strict
+    // (3 min / 3 pts) so mono-machine use never false-positives; the marker is non-dangerous anyway
+    // (the multi-machine bias is already CONSERVATIVE — it makes "~N msg" read low, never high).
+    if (liveFive && typeof pace._seenTs === 'number' && typeof pace._seenPct5 === 'number'
+        && pace._seenTurns === pace._turns
+        && now - pace._seenTs > 180000 && liveFive.used_percentage - pace._seenPct5 >= 3) {
+      pace._ctst5 = now;
+    }
+    if (liveFive) { pace._seenTs = now; pace._seenPct5 = liveFive.used_percentage; pace._seenTurns = pace._turns; }
+    const contested5 = typeof pace._ctst5 === 'number' && now - pace._ctst5 < 15 * 60000;
+
+    // Window baseline in the SHARED pace file (key = resets_at, so at the window reset it restarts
+    // clean). turn0 = the GLOBAL turn count when the baseline was set -> %-per-turn burn is measured
+    // over turns POOLED from every window. "(+X%)" therefore reads "burned this window (this machine)".
     const sessDelta = (key, live) => {
       if (!live) return null;
-      const b = base[key];
+      const b = pace[key];
       // Re-baseline on: no baseline, a baseline from an OLDER version missing turn0 (migration),
       // a new window (resets_at changed), or a drop below baseline (window rolled).
       if (!b || typeof b.turn0 !== 'number' || b.resets_at !== live.resets_at || live.used_percentage < b.pct) {
-        base[key] = { pct: live.used_percentage, resets_at: live.resets_at, ts: now, turn0: turnN };
+        pace[key] = { pct: live.used_percentage, resets_at: live.resets_at, ts: now, turn0: turnN };
       }
-      return live.used_percentage - base[key].pct;
+      return live.used_percentage - pace[key].pct;
     };
     const dF = sessDelta('five', liveFive);
     const dW = sessDelta('seven', liveSeven);
 
-    // "~N msg" — remaining quota translated into remaining PROMPTS, from THIS session's measured
-    // %-per-turn burn. Honest (same family as the burn warning): hidden until there's real signal.
+    // "~N msg" — remaining quota translated into remaining PROMPTS, from the %-per-turn burn POOLED
+    // across this machine's windows. Honest (same family as the burn warning): hidden until real signal.
     const perTurnBurn = (key, live) => {
-      const b = base[key];
+      const b = pace[key];
       if (!live || !b || typeof b.turn0 !== 'number') return null;
       const dt = turnN - b.turn0, dp = live.used_percentage - b.pct;
       if (dt < 2 || dp < 1) return null; // too few turns / too little burned: rate is noise
@@ -428,8 +470,8 @@ function renderFromStdin() {
       const msFull = remaining / rate, resetMs = live.resets_at * 1000 - now;
       return resetMs > 0 && msFull < resetMs ? msFull : null;
     };
-    const bwFive = burnWarn(liveFive, base.five);
-    const bwSeven = burnWarn(liveSeven, base.seven);
+    const bwFive = burnWarn(liveFive, pace.five);
+    const bwSeven = burnWarn(liveSeven, pace.seven);
 
     // Binding constraint: mark whichever window is closer to its OWN cap — the one that bites first.
     let bindKey = null;
@@ -458,7 +500,7 @@ function renderFromStdin() {
       const cc = stF ? GR : col4(p, 50, 70, 85);
       let s = `5h ${cc}${Math.round(p)}%${mk(stF)}${R}`;
       if (!stF && dF != null && dF >= 1) s += `${GR}(+${Math.round(dF)}%)${R}`;
-      if (!stF && msgLeftFive != null) s += ` ${col4inv(msgLeftFive, 20, 10, 5)}~${msgLeftFive > 99 ? '99+' : msgLeftFive} msg${R}`;
+      if (!stF && msgLeftFive != null) s += ` ${col4inv(msgLeftFive, 20, 10, 5)}~${msgLeftFive > 99 ? '99+' : msgLeftFive} msg${contested5 ? '‖' : ''}${R}`;
       const pro = Math.round(p * PRO_FACTOR);
       const pc = stF ? GR : col4(pro, 60, 90, 100);
       s += ` ${DIM}→${R} ${pc}(${!stF && pro >= 100 ? '⚠  ' : ''}Pro~${pro}%)${R}`;
@@ -480,8 +522,11 @@ function renderFromStdin() {
       lim.push(s);
     }
 
-    // ── persist per-session state + the explain snapshot (best effort; never fatal) ──
+    // ── persist per-session state + shared pace + the explain snapshot (best effort; never fatal) ──
     try { writeFileSync(baseFile, JSON.stringify(base)); } catch { /* best effort */ }
+    // Read-modify-write: a broken payload writes back what we read (no clobber). Plain write (not
+    // rename): fs.renameSync can't overwrite on Windows, and a torn read is caught by readJson -> {}.
+    try { writeFileSync(PACE_FILE, JSON.stringify(pace)); } catch { /* best effort */ }
     try {
       const snap = {
         ts: now,
@@ -495,14 +540,15 @@ function renderFromStdin() {
           pro: Math.round(pickFive.used_percentage * PRO_FACTOR),
           msgLeft: msgLeftFive, perTurn: perTurnFive,
           burnMs: bwFive, resetAt: pickFive.resets_at, resetMs: pickFive.resets_at * 1000 - now,
-          spark: base.h5 || [], binding: bindKey === 'five',
+          spark: pace.h5 || [], binding: bindKey === 'five',
+          contested: contested5, pooled: activeSessions,
         } : null,
         seven: pickSeven ? {
           pct: pickSeven.used_percentage, stale: stW,
           delta: (!stW && dW != null && dW >= 1) ? Math.round(dW) : null,
           pace: weekPace, burnMs: bwSeven,
           resetAt: pickSeven.resets_at, resetMs: pickSeven.resets_at * 1000 - now,
-          spark: base.hw || [], binding: bindKey === 'seven',
+          spark: pace.hw || [], binding: bindKey === 'seven',
         } : null,
       };
       writeFileSync(EXPLAIN_FILE, JSON.stringify(snap));

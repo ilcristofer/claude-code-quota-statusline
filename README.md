@@ -57,14 +57,15 @@ CONTEXT
   cache 92%                      share of input served from cache — higher = cheaper & faster
 
 5-HOUR WINDOW
-  5h 24% (+4%)                   quota used · (+X%) burned by THIS session
+  5h 24% (+4%)                   quota used · (+X%) = burned this window
   ~38 msg left                   ≈ prompts remaining before the cap, at your recent pace (~2.0%/msg)
-  ▁▂▃▅█                          recent 5h-burn trend (this session)
+  pooled across 2 sessions       the per-msg pace is shared, so "~N msg" stays honest with several windows open
+  ▁▂▃▅█                          recent 5h-burn trend (this machine)
   → (⚠  Pro~120%)                the same usage projected onto the Pro plan (rough ×5 gauge)
   ↻ 3h59m (15:01)                resets in / at
 
 WEEKLY WINDOW
-  wk 38% (+2%)                   quota used · session delta
+  wk 38% (+2%)                   quota used · (+X%) = burned this window
   over pace ⚠                    spent 38% vs ~33% of the week elapsed (steady-spend reference)
   ↻ 1d3h (Tue 14:00)             resets in / at
   ◀ binding constraint           of the two windows, this is the one that caps first
@@ -91,7 +92,9 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 
 - **`~N msg` remaining** — your leftover quota translated into *how many more prompts you can send*
   before the 5-hour window caps, from your own measured pace. Humans think in messages, not
-  percentages. I haven't seen this anywhere else.
+  percentages. I haven't seen this anywhere else. The pace is **pooled across every Claude Code
+  window on the machine**, so the number stays honest with several sessions open (`/quota` says
+  "pooled across N sessions"); the rare cross-machine case is flagged with `‖`.
 - **`/quota` explained view** — a full annotated legend of every segment, populated with your real
   values (from a snapshot the line persists — no extra API calls). The line is the glance; `/quota`
   is the manual.
@@ -113,10 +116,12 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 - **Actionable compaction hints** at absolute thresholds — advisory only, *you* decide.
 - **`↓ N` reclaimable-tokens** estimate once you pass the compact threshold.
 - **`~N msg` remaining** — quota translated into how many more prompts fit before the 5h window
-  caps, at your recent pace (self-gated: appears once there's enough signal to be honest).
+  caps, at your recent pace (self-gated: appears once there's enough signal to be honest). The pace
+  is **pooled across all your open windows** on this machine, so it doesn't jump between sessions;
+  the marker `‖` flags the rare case of another *machine* also spending the quota.
 - **`↗ compact ~N` heads-up** — projects context growth and warns ~N turns *before* you'll cross
   the `/compact` line (only when it's close).
-- **Per-session quota delta** `(+X%)` — how many quota points *this session* burned.
+- **Per-window quota delta** `(+X%)` — how many quota points burned since this window opened.
 - **`Pro~` projection** — estimates the same usage against the Pro plan, so you can judge
   whether Pro would be enough (or whether you're safe on Max).
 - **`/quota` explained view** — bundled slash command that prints an annotated legend (with a
@@ -125,7 +130,7 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
   resets and *at what time* (weekday-prefixed when it's more than ~20h out, e.g. `Wed 09:00`).
 - **Binding-constraint marker** `◀` — flags whichever window (5h vs weekly) is closer to its own
   cap, i.e. the one that will bite first (only when it's ≥50% and there's a real gap).
-- **Burn-rate warning** `⚠ full ~45m` — if, at *this session's* average pace, a window would hit
+- **Burn-rate warning** `⚠ full ~45m` — if, at your *recent* average pace, a window would hit
   100% **before** it resets, it warns you with the projected time-to-full. Hidden otherwise.
 - **Cache hit %** and **cold-turn** warning.
 - **Optional orientation** — a non-default output style shows automatically; git branch + dirty
@@ -148,7 +153,7 @@ one is built for subscribers, and a few of its ideas don't (yet) exist elsewhere
 | Compaction hint | `~ compact (save token) ↓ 50k` | Advisory at thresholds; `↓ N` = tokens reclaimable by `/compact` |
 | Cache | `cache 89%` | Share of input served from cache last turn (high = good) |
 | Turn | `turn 7.2k` | **Fresh** tokens this turn (new input + cache write + output; **excludes** the re-read context) |
-| Messages left | `~14 msg` | ≈ prompts remaining before the 5h cap, at this session's measured pace (self-gated) |
+| Messages left | `~14 msg` | ≈ prompts remaining before the 5h cap, at the machine's pooled pace across open windows (self-gated); `‖` = contested by another device |
 | 5h limit | `5h 20% (+6%) ~14 msg → (⚠  Pro~100%) ↻ 3h18m (18:42) ◀` | 5-hour window %, session delta, messages-left, Pro-plan projection, reset countdown + wall-clock time; `◀` = binding constraint |
 | Weekly limit | `wk 16% ↻ 3d13h (Wed 09:00)` | Weekly window %, session delta, reset countdown + wall-clock time |
 | Burn warning | `⚠ full ~45m` | Shown only if the window will hit 100% before it resets at the session's average pace |
@@ -287,8 +292,14 @@ process so the render itself never waits on the network.
 
 `rate_limits` is derived from the last API response headers, so it's absent for the very first
 render of a session; the script persists the last known values to the OS temp dir and shows
-them as stale (`*`) until fresh data arrives. Per-session quota deltas are baselined per
-reset-window so they restart cleanly when a window rolls over.
+them as stale (`*`) until fresh data arrives. Quota deltas are baselined per reset-window so they
+restart cleanly when a window rolls over.
+
+The `~N msg` pace is **pooled across every Claude Code window on the machine** via a small shared
+file in the temp dir (`used_percentage` is account-global, so the per-message rate has to be too —
+otherwise the number would jump between windows). A second *machine* can't share that file, so if
+its usage moves the quota while this machine is idle, the line flags `~N msg` with `‖` and reads
+conservatively rather than pretending it can see the other device.
 
 ## Companion: `/effort-suggest`
 
