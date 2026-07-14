@@ -25,7 +25,13 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execSync } from 'node:child_process'; // ONLY for the opt-in git segment (CC_SL_GIT=1)
+import { execSync, spawn } from 'node:child_process'; // execSync: opt-in git segment; spawn: detached update check
+import { get as httpsGet } from 'node:https';           // update check only (behind CC_SL_UPDATE, default on)
+import { fileURLToPath } from 'node:url';               // locate this file when spawning the update check
+
+// Tool version. BUMP on each release + push to main: installed clients compare this against main's
+// VERSION and show a "⬆ vX.Y.Z" nudge (see the update-check block below).
+const VERSION = '0.9.0';
 
 // SUGGESTION thresholds (absolute, in tokens) — override via env, else default.
 // They DON'T force anything: they color the bar and suggest. The actual compaction is
@@ -45,12 +51,14 @@ const envOn = (v) => /^(1|true|yes|on)$/i.test(String(v || ''));
 const SHOW_GIT  = envOn(process.env.CC_SL_GIT);
 const SHOW_CWD  = envOn(process.env.CC_SL_CWD);
 const SHOW_BURN = process.env.CC_SL_BURN == null ? true : envOn(process.env.CC_SL_BURN);
+// CC_SL_UPDATE=0 -> disable the once/day GitHub update check (on by default; detached + fail-silent)
+const CHECK_UPDATES = process.env.CC_SL_UPDATE == null ? true : envOn(process.env.CC_SL_UPDATE);
 
 const WEEK_SECONDS = 7 * 24 * 3600; // weekly window length (for the steady-spend pace reference)
 
 // ── Shared, PURE helpers (used by BOTH the render path and the explain view) ──────────────
 const R = '\x1b[0m', DIM = '\x1b[2m', B = '\x1b[1m';
-const G = '\x1b[32m', Y = '\x1b[33m', O = '\x1b[38;5;208m', Rd = '\x1b[31m', GR = '\x1b[90m';
+const G = '\x1b[32m', Y = '\x1b[33m', O = '\x1b[38;5;208m', Rd = '\x1b[31m', GR = '\x1b[90m', Cy = '\x1b[36m';
 // 4-level scale. col4: green < t1 <= yellow < t2 <= orange < t3 <= red (high=bad).
 // col4inv: high=good -> >=hi green, >=mid yellow, >=lo orange, below red.
 const col4 = (v, t1, t2, t3) => (v >= t3 ? Rd : v >= t2 ? O : v >= t1 ? Y : G);
@@ -104,6 +112,37 @@ const ago = (ms, nowMs) => {
 // Where the normal render drops a snapshot for the explain view. GLOBAL (last render wins across
 // sessions): `explain` runs as a separate process with no stdin payload, so it can only read this.
 const EXPLAIN_FILE = join(tmpdir(), 'cc-sl-explain.json');
+
+// ── Update check (default on; CC_SL_UPDATE=0 disables) ────────────────────────────────────
+// The render reads UPDATE_FILE (instant) to decide whether to show "⬆ vX"; at most once/day it
+// fires a DETACHED child (mode "checkupdate") that refreshes it. The line NEVER waits on network.
+const UPDATE_FILE = join(tmpdir(), 'cc-sl-update.json');
+const UPDATE_TTL = 24 * 3600 * 1000; // hit GitHub at most once/day
+const VERSION_URL = 'https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/statusline.mjs';
+// semver-ish: is a strictly newer than b? ("1.2.0" > "1.1.9")
+const isNewer = (a, b) => {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+};
+// Runs in the detached child: fetch main's statusline.mjs, extract its VERSION, cache {checkedAt,latest}.
+// Never throws; a slow/unreachable GitHub simply writes nothing (we retry next day).
+function checkUpdate() {
+  const req = httpsGet(VERSION_URL, { timeout: 4000, headers: { 'User-Agent': `cc-sl/${VERSION}` } }, (res) => {
+    if (res.statusCode !== 200) { res.resume(); return; }
+    let body = '';
+    res.on('data', (c) => (body += c));
+    res.on('end', () => {
+      const m = body.match(/const VERSION\s*=\s*['"]([\d.]+)['"]/);
+      if (m) { try { writeFileSync(UPDATE_FILE, JSON.stringify({ checkedAt: Date.now(), latest: m[1] })); } catch { /* best effort */ } }
+    });
+  });
+  req.on('error', () => { /* offline / DNS / TLS: ignore */ });
+  req.on('timeout', () => req.destroy());
+}
 
 // ── EXPLAIN VIEW: annotated legend with the user's real latest values ─────────────────────
 // Generic fallback shown before the first render populates a real snapshot.
@@ -169,12 +208,26 @@ function printExplain() {
   }
 
   out.push(`${DIM}Symbols: ↓N = tokens /compact would reclaim · ◀ = window that caps first · * = stale · colors run green → yellow → orange → red by risk.${R}`);
+
+  // version / update status (read the update cache directly; explain runs as its own process)
+  let vLine = `${DIM}⛽ Fuel Gauge v${VERSION}${R}`;
+  try {
+    const upd = JSON.parse(readFileSync(UPDATE_FILE, 'utf8'));
+    if (upd.latest && isNewer(upd.latest, VERSION))
+      vLine = `${Cy}⬆ update available — v${upd.latest}${R} ${DIM}(you have v${VERSION}). Re-run the installer to update:${R}\n` +
+              `  ${DIM}curl -fsSL https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.sh | sh${R}\n` +
+              `  ${DIM}Windows: irm https://raw.githubusercontent.com/ilcristofer/claude-code-quota-statusline/main/install.ps1 | iex${R}`;
+  } catch { /* no cache yet */ }
+  out.push('');
+  out.push(vLine);
   process.stdout.write(out.join('\n') + '\n');
 }
 
 // ── entry point: explain mode (manual, no stdin) vs the normal render (stdin payload) ──────
 const mode = process.argv[2];
-if (mode === 'explain' || mode === '--explain' || mode === 'legend' || mode === '--legend') {
+if (mode === 'checkupdate') {
+  try { checkUpdate(); } catch { /* detached child: never throw */ }
+} else if (mode === 'explain' || mode === '--explain' || mode === 'legend' || mode === '--legend') {
   try { printExplain(); } catch { /* never throw: manual view degrades to nothing */ }
 } else {
   renderFromStdin();
@@ -189,6 +242,23 @@ function renderFromStdin() {
 
     const sep = `${DIM}  ${R}`;
     const now = Date.now();
+
+    // Update check (default on; CC_SL_UPDATE=0). Non-blocking: read the cached result NOW; if it's
+    // stale, fire a detached child to refresh it (result shows up on a LATER render). Never awaited.
+    let updAvail = null;
+    if (CHECK_UPDATES) {
+      let upd = {};
+      try { upd = JSON.parse(readFileSync(UPDATE_FILE, 'utf8')); } catch { /* first time */ }
+      if (upd.latest && isNewer(upd.latest, VERSION)) updAvail = upd.latest;
+      if (!upd.checkedAt || now - upd.checkedAt > UPDATE_TTL) {
+        try {
+          // advance checkedAt now so concurrent renders don't all spawn (spawn-storm guard)
+          writeFileSync(UPDATE_FILE, JSON.stringify({ ...upd, checkedAt: now }));
+          spawn(process.execPath, [fileURLToPath(import.meta.url), 'checkupdate'],
+            { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+        } catch { /* best effort: never let the check break the line */ }
+      }
+    }
 
     // VISIBLE width of a string (without ANSI codes); double-cell glyphs count as 2.
     const vlen = (s) => {
@@ -225,6 +295,8 @@ function renderFromStdin() {
     // chat title, already shown elsewhere in the Claude Code UI, so it'd be redundant here).
     const ostyle = d.output_style?.name;
     if (ostyle && ostyle !== 'default') head += ` ${DIM}·${R} ${DIM}style:${ostyle}${R}`;
+    // Update nudge (self-gating: only when a newer version is cached). Full how-to lives in /quota.
+    if (updAvail) head += ` ${DIM}·${R} ${Cy}⬆ v${updAvail}${R}`;
 
     // --- 1b) orientation (opt-in): project dir basename + git branch/dirty ---
     const dir = d.workspace?.current_dir || d.cwd || '';
